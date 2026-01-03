@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>  
+<!DOCTYPE log4j:configuration SYSTEM "log4j.dtd">
+
+<log4j:configuration>
+	<appender name="CONSOLE" class="org.apache.log4j.ConsoleAppender">
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%d -%-4r [%t] %-5p %x - (%13F:%L) - %m%n" />
+		</layout>
+	</appender>
+
+	<!-- 本地配置 -->
+	<appender name="CMPP-LOG-FILE" class="org.apache.log4j.DailyRollingFileAppender">
+		<param name="File" value="logs/smsgateway.log" />
+		<!-- <param name="File" value="/home/server/logs/smsservice/vss-cmpp.log" /> -->
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%d [%t] %p %c[%L] %x - %m%n" />
+		</layout>
+	</appender>
+	
+	<logger name="com.lljqiu.cmpp" additivity="false">
+		<level value="debug" />
+		<appender-ref ref="CONSOLE" />
+		<appender-ref ref="CMPP-LOG-FILE" />
+	</logger>
+	
+	<root>
+	    <priority value="debug" />
+	</root>
+</log4j:configuration>  
