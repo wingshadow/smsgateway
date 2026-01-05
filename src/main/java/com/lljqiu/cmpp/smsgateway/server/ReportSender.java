@@ -1,5 +1,6 @@
 package com.lljqiu.cmpp.smsgateway.server;
 
+import com.alibaba.fastjson.JSON;
 import com.lljqiu.cmpp.smsgateway.service.PutMsgService;
 import com.lljqiu.cmpp.smsgateway.stack.MsgSubmit;
 import org.slf4j.Logger;
@@ -42,16 +43,14 @@ public class ReportSender {
     /**
      * 提交待发送状态报告（短信下发或 deliver 事件触发）
      */
-    public static void submitPendingReports(long submitSeq) {
-        PendingReport report = pendingReports.remove(submitSeq);
+    public static void submitPendingReports(int submitSeq) {
+        PendingReport report = pendingReports.get(submitSeq);
         if (report == null) {
             return;
         }
-
         MsgSubmit submit = report.getSubmit();
         Socket socket = report.getSocket();
         long msgId = report.getMsgId();
-
         List<String> destList = submit.getDestTerminalId();
         if (destList == null || destList.isEmpty()) {
             return;
@@ -59,6 +58,7 @@ public class ReportSender {
 
         int delay = 0;
         for (String dest : destList) {
+            logger.info("发送, seq={}, msgId={}", submit.getSequenceId(), msgId);
             EXECUTOR.schedule(() -> sendOne(socket, submit, msgId, dest),
                     delay, TimeUnit.MILLISECONDS);
             delay += 200;

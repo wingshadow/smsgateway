@@ -85,6 +85,7 @@ public class ReadMsgService {
 
                     long msgId = MsgIdGenerator.nextId();
                     result = PutMsgService.setSubmitResp(submitReq,msgId);
+                    // 增加deliver相关处理
                     ReportSender.cachePendingReport(socket,submitReq,msgId);
                     break;
 

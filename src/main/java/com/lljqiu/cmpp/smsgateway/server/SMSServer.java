@@ -39,7 +39,7 @@ public class SMSServer {
              DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
 
             while (true) {
-                byte[] respMessage = ReadMsgService.readRequestMessage(socket,input, spIp);
+                byte[] respMessage = ReadMsgService.readRequestMessage(socket, input, spIp);
 
                 if (respMessage == null) {
                     logger.info("客户端 {} 已断开或数据异常，关闭连接", spIp);
@@ -49,12 +49,13 @@ public class SMSServer {
                 output.write(respMessage);
                 output.flush();
 
-                //
+                //添加deliver相关代码处理
                 int cmd = parseCommand(respMessage);
-
+                logger.info("cmd:{}", Integer.toHexString(cmd));
                 if (cmd == MsgCommand.CMPP_SUBMIT_RESP) {
                     // 从byte数组里面获取sequeueId
-                    long seqId = readSequenceId(respMessage);
+                    int seqId = readSequenceId(respMessage);
+                    logger.info("seqId:{}", seqId);
                     // 发送resp后再发送状态报告
                     ReportSender.submitPendingReports(seqId);
                 }
@@ -74,32 +75,47 @@ public class SMSServer {
 
     /**
      * 解析 CMPP 消息类型
+     *
      * @param message 完整消息字节数组
      * @return 对应的 MsgCommand 常量值，如果无法识别返回 -1
      */
     private int parseCommand(byte[] message) {
         if (message == null || message.length < 8) {
-            return -1; // 消息太短
+            return -1;
         }
 
-        // CMPP 协议：前 4 字节是总长度，紧接 4 字节是 Command_Id
-        int commandId = ((message[4] & 0xFF) << 24)
-                | ((message[5] & 0xFF) << 16)
-                | ((message[6] & 0xFF) << 8)
-                | (message[7] & 0xFF);
 
         // 可选：检查是否在 MsgCommand 常量里
+        int commandId =
+                ((message[4] & 0xFF) << 24)
+                        | ((message[5] & 0xFF) << 16)
+                        | ((message[6] & 0xFF) << 8)
+                        | (message[7] & 0xFF);
+
         switch (commandId) {
-            case MsgCommand.CMPP_CONNECT: return MsgCommand.CMPP_CONNECT;
-            case MsgCommand.CMPP_CONNECT_RESP: return MsgCommand.CMPP_CONNECT_RESP;
-            case MsgCommand.CMPP_TERMINATE: return MsgCommand.CMPP_TERMINATE;
-            case MsgCommand.CMPP_TERMINATE_RESP: return MsgCommand.CMPP_TERMINATE_RESP;
-            case MsgCommand.CMPP_SUBMIT: return MsgCommand.CMPP_SUBMIT;
-            case MsgCommand.CMPP_SUBMIT_RESP: return MsgCommand.CMPP_SUBMIT_RESP;
-            case MsgCommand.CMPP_DELIVER: return MsgCommand.CMPP_DELIVER;
-            case MsgCommand.CMPP_DELIVER_RESP: return MsgCommand.CMPP_DELIVER_RESP;
-            // 如果需要，可以加其他命令
-            default: return -1; // 未知命令
+
+            case 0x00000001:
+                return MsgCommand.CMPP_CONNECT;
+
+            case 0x80000001:
+                return MsgCommand.CMPP_CONNECT_RESP;
+
+            case 0x00000002:
+                return MsgCommand.CMPP_TERMINATE;
+
+            case 0x80000002:
+                return MsgCommand.CMPP_TERMINATE_RESP;
+
+            case 0x00000004:
+                return MsgCommand.CMPP_SUBMIT;
+
+            case 0x80000004:
+                return MsgCommand.CMPP_SUBMIT_RESP;
+
+            default:
+                logger.warn("Unknown CMPP Command_Id: 0x{}",
+                        Integer.toHexString(commandId));
+                return -1;
         }
     }
 
