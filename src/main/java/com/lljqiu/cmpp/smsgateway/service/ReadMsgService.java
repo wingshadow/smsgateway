@@ -102,7 +102,7 @@ public class ReadMsgService {
     }
 
     /** 读取Submit消息（不改动原逻辑，只保证安全读取） */
-    private static MsgSubmit readSubmit(byte[] requestData) {
+    public static MsgSubmit readSubmit(byte[] requestData) {
         MsgSubmit submitReq = new MsgSubmit();
         try (ByteArrayInputStream bins = new ByteArrayInputStream(requestData);
              DataInputStream dins = new DataInputStream(bins)) {
