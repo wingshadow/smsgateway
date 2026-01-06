@@ -38,7 +38,7 @@ public class MsgConnectResp extends MsgHead {
             dous.writeInt(this.getSequenceId());
             dous.writeInt(status);
             dous.write(authenticatorISMG);
-            dous.writeInt(version);
+            dous.writeByte(version);
             dous.close();
         } catch (IOException e) {
             logger.error("封装链接二进制数组失败。");

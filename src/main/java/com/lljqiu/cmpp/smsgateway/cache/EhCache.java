@@ -72,8 +72,9 @@ public class EhCache {
      **/
     public static void put(String cacheName, Object key, Object value) {
         Cache cache = manager.getCache(cacheName);
-        if (cache != null)
+        if (cache != null) {
             cache.put(new Element(key, value));
+        }
     }
 
     /**

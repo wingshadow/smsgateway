@@ -7,7 +7,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 import com.lljqiu.cmpp.smsgateway.stack.MsgCommand;
-import com.lljqiu.cmpp.smsgateway.stack.MsgDeliver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,17 +47,6 @@ public class SMSServer {
 
                 output.write(respMessage);
                 output.flush();
-
-                //添加deliver相关代码处理
-                int cmd = parseCommand(respMessage);
-                logger.info("cmd:{}", Integer.toHexString(cmd));
-                if (cmd == MsgCommand.CMPP_SUBMIT_RESP) {
-                    // 从byte数组里面获取sequeueId
-                    int seqId = readSequenceId(respMessage);
-                    logger.info("seqId:{}", seqId);
-                    // 发送resp后再发送状态报告
-                    ReportSender.submitPendingReports(seqId);
-                }
             }
 
         } catch (IOException e) {

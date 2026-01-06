@@ -248,4 +248,15 @@ public class GateWayUtils {
 
         return seqId;
     }
+
+    public static String toHex(byte[] data) {
+        if (data == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(data.length * 3);
+        for (byte b : data) {
+            sb.append(String.format("%02X ", b));
+        }
+        return sb.toString().trim();
+    }
 }

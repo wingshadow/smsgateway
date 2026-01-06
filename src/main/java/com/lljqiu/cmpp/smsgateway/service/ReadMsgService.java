@@ -2,9 +2,7 @@ package com.lljqiu.cmpp.smsgateway.service;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.Arrays;
 
-import com.lljqiu.cmpp.smsgateway.server.ReportSender;
 import com.lljqiu.cmpp.smsgateway.utils.MsgIdGenerator;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.slf4j.Logger;
@@ -85,8 +83,6 @@ public class ReadMsgService {
 
                     long msgId = MsgIdGenerator.nextId();
                     result = PutMsgService.setSubmitResp(submitReq,msgId);
-                    // 增加deliver相关处理
-                    ReportSender.cachePendingReport(socket,submitReq,msgId);
                     break;
 
                 default:

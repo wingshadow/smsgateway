@@ -27,12 +27,13 @@ public class ServerStart {
     private static Logger logger = LoggerFactory.getLogger(ServerStart.class);
     public static void main(String[] args) {
 //        SMSServer server = new SMSServer();
+//        server.start();
         JSONArray jsonArray = GatewayConfig.getClientConfig();
         for (int i = 0; i < jsonArray.size(); i++) {
             JSONObject json = (JSONObject) jsonArray.get(i);
             EhCache.put(EhCache.CACHE_NAME, json.get(Constants.SPID), json);
         }
-//        server.start();
+
 
         int port = GatewayConfig.getGatewayPort();
         NettyCmppServer server = new NettyCmppServer();

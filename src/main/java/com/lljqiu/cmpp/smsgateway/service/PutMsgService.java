@@ -9,15 +9,15 @@
 package com.lljqiu.cmpp.smsgateway.service;
 
 import com.lljqiu.cmpp.smsgateway.stack.*;
-import com.lljqiu.cmpp.smsgateway.utils.CmppEncoder;
-import com.lljqiu.cmpp.smsgateway.utils.Sequence;
-import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.lljqiu.cmpp.smsgateway.exception.GateWayException;
 import com.lljqiu.cmpp.smsgateway.utils.GateWayUtils;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -59,7 +59,7 @@ public class PutMsgService {
 
         logger.debug("<{}响应消息{}>",
                 "CONNECT_RESP",
-                ToStringBuilder.reflectionToString(connectResp));
+                GateWayUtils.toHex(connectResp.toByteArry()));
 
         return connectResp.toByteArry();
     }
@@ -83,71 +83,83 @@ public class PutMsgService {
         return submitResp.toByteArry();
     }
 
-    public static byte[] buildDeliverReport(MsgSubmit submit,
-                                            long reportMsgId,
-                                            String destTerminalId,
-                                            String stat) {
 
-        MsgDeliver deliver = new MsgDeliver();
 
-        // ===== 消息头 =====
-        deliver.setCommandId(MsgCommand.CMPP_DELIVER);
-        deliver.setSequenceId(Sequence.next());
+    /**
+     * 编码MsgReport为60字节
+     */
+    private static byte[] encodeMsgReport(MsgReport report) {
+        ByteBuffer buffer = ByteBuffer.allocate(60);
+        buffer.order(ByteOrder.BIG_ENDIAN);
 
-        /**
-         * CMPP3.0 约定：
-         * 状态报告时，DELIVER.Msg_Id = 0
-         */
-        deliver.setMsgId(0L);
+        // 1. Msg_Id (8字节)
+        buffer.putLong(report.getMsgId());
 
-        // ===== Deliver 固定字段 =====
-        deliver.setDestId(submit.getSrcId());          // SP号
-        deliver.setServiceId(submit.getServiceId());
-        deliver.setTpPid(submit.getTpPId());
-        deliver.setTpUdhi(submit.getTpUdhi());
-        deliver.setMsgFmt(submit.getMsgFmt());
+        // 2. Stat (7字节，右补空格)
+        byte[] statBytes = report.getStat().getBytes(StandardCharsets.US_ASCII);
+        int statLen = Math.min(statBytes.length, 7);
+        buffer.put(statBytes, 0, statLen);
+        for (int i = statLen; i < 7; i++) {
+            buffer.put((byte) ' ');  // 右补空格
+        }
 
-        // 源终端：用户手机号（单个）
-        deliver.setSrcTerminalId(destTerminalId);
-        deliver.setSrcTerminalType(0);
+        // 3. Submit_time (10字节)
+        buffer.put(fixedLengthBytes(report.getSubmitTime(), 10));
 
-        // 关键：状态报告
-        deliver.setRegisteredDelivery(1);
+        // 4. Done_time (10字节)
+        buffer.put(fixedLengthBytes(report.getDoneTime(), 10));
 
-        // 状态报告 Msg_Content 固定 60
-        deliver.setMsgLength(60);
+        // 5. Dest_terminal_Id (21字节，左对齐右补0)
+        buffer.put(fixedLengthBytes(report.getDestTerminalId(), 21));
 
-        // ===== MsgReport =====
-        MsgReport report = new MsgReport();
+        // 6. SMSC_sequence (4字节)
+        buffer.putInt(report.getSmscSequence());
 
-        /**
-         * 这里必须是：
-         * ISMG 在 SUBMIT_RESP 中返回的 Msg_Id
-         */
-        report.setMsgId(reportMsgId);
+        // 填充剩余字节为0（总60字节）
+        while (buffer.position() < 60) {
+            buffer.put((byte) 0);
+        }
 
-        /**
-         * DELIVRD / UNDELIV / EXPIRED / REJECTD
-         * 7字节，右补 0x00
-         */
-        report.setStat(stat);
-
-        // YYMMDDHHMM
-        report.setSubmitTime(now());
-        report.setDoneTime(now());
-
-        // 单个目标手机号
-        report.setDestTerminalId(destTerminalId);
-
-        /**
-         * 一般取 SUBMIT 的 sequenceId
-         */
-        report.setSmscSequence(submit.getSequenceId());
-
-        deliver.setReport(report);
-
-        return CmppEncoder.encode(deliver);
+        return buffer.array();
     }
+
+    /**
+     * 固定长度字节数组，不足右补0
+     */
+    private static byte[] fixedLengthBytes(String str, int length) {
+        byte[] bytes = new byte[length];
+        if (str != null) {
+            byte[] src = str.getBytes(StandardCharsets.US_ASCII);
+            int copyLen = Math.min(src.length, length);
+            System.arraycopy(src, 0, bytes, 0, copyLen);
+            // 剩余部分已经是0
+        }
+        return bytes;
+    }
+
+
+
+    /**
+     * 截断或填充字符串
+     */
+    private static String truncateOrPad(String str, int length, char padChar) {
+        if (str == null) {
+            str = "";
+        }
+
+        if (str.length() > length) {
+            return str.substring(0, length);
+        } else if (str.length() < length) {
+            StringBuilder sb = new StringBuilder(str);
+            while (sb.length() < length) {
+                sb.append(padChar);
+            }
+            return sb.toString();
+        }
+        return str;
+    }
+
+
 
     private static String now() {
         // CMPP 要求：YYMMDDHHMM
