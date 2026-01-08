@@ -17,7 +17,7 @@ import com.lljqiu.cmpp.smsgateway.utils.GatewayConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** 
+/**
  * ClassName: ServerStart.java <br>
  * Description: <br>
  * Create by: name：liujie <br>email: liujie@lljqiu.com <br>
@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
  */
 public class ServerStart {
     private static Logger logger = LoggerFactory.getLogger(ServerStart.class);
+
     public static void main(String[] args) {
 //        SMSServer server = new SMSServer();
 //        server.start();
@@ -36,15 +37,7 @@ public class ServerStart {
 
 
         int port = GatewayConfig.getGatewayPort();
-        NettyCmppServer server = new NettyCmppServer();
-
-        try {
-            logger.info("Starting Netty CMPP Server on port {}", port);
-            server.start(port);
-        } catch (InterruptedException e) {
-            logger.error("Netty CMPP Server start interrupted", e);
-            Thread.currentThread().interrupt();
-        }
+        NettyCmppServer server = new NettyCmppServer(port);
+        server.startAsync();
     }
-
 }

@@ -18,6 +18,7 @@ import java.net.InetSocketAddress;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.LongAdder;
 
 public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
@@ -25,9 +26,8 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
     private static final DateTimeFormatter TS_FMT =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-    /**
-     * 业务线程池（网关级）
-     */
+
+    /** 业务线程池（处理 submit/connect） */
     private static final ExecutorService BUSINESS_POOL =
             new ThreadPoolExecutor(
                     8,
@@ -41,32 +41,53 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
                         t.setDaemon(true);
                         return t;
                     },
-                    new ThreadPoolExecutor.AbortPolicy()
+                    new ThreadPoolExecutor.CallerRunsPolicy()
+            );
+
+    /** 状态报告线程池 */
+    private static final ScheduledExecutorService REPORT_POOL =
+            Executors.newScheduledThreadPool(
+                    4,
+                    r -> {
+                        Thread t = new Thread(r);
+                        t.setName("CMPP-REPORT-" + t.getId());
+                        t.setDaemon(true);
+                        return t;
+                    }
             );
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ByteBuf buf) {
-        final byte[] data = new byte[buf.readableBytes()];
-        buf.getBytes(buf.readerIndex(), data);
+        // 1️⃣ 零拷贝，使用 retainedDuplicate
+        final ByteBuf retained = buf.retainedDuplicate();
+
         try {
-            BUSINESS_POOL.execute(() -> process(ctx, data));
+            BUSINESS_POOL.execute(() -> {
+                try {
+                    process(ctx, retained);
+                } finally {
+                    retained.release(); // 处理完必须释放
+                }
+            });
         } catch (RejectedExecutionException e) {
-            // 线程池满：直接拒绝（网关允许）
-            log.warn("业务线程池已满，丢弃请求");
+            // 队列满，回退到 IO 线程处理
+            log.warn("业务线程池已满，IO 线程直接处理请求");
+            process(ctx, retained);
+            retained.release();
         }
     }
 
-    /**
-     * 业务处理
-     */
-    private void process(ChannelHandlerContext ctx, byte[] data) {
+    /** 业务处理 */
+    private void process(ChannelHandlerContext ctx, ByteBuf buf) {
         try {
+            byte[] data = new byte[buf.readableBytes()];
+            buf.getBytes(buf.readerIndex(), data);
+
             MsgHead head = ReadMsgService.readHead(data);
 
             switch (head.getCommandId()) {
 
                 case MsgCommand.CMPP_CONNECT: {
-
                     MsgConnect req = ReadMsgService.readConnect(
                             data,
                             ((InetSocketAddress) ctx.channel().remoteAddress())
@@ -79,13 +100,11 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
                 case MsgCommand.CMPP_SUBMIT: {
                     MsgSubmit submit = ReadMsgService.readSubmit(data);
-
                     long msgId = MsgIdGenerator.nextId();
 
-                    // 1️⃣ 立即回 SubmitResp（CMPP 核心）
                     byte[] resp = PutMsgService.setSubmitResp(submit, msgId);
                     write(ctx, resp);
-                    // 2️⃣ 延迟发状态报告（走 EventLoop）
+
 //                    scheduleReport(ctx, submit, msgId);
                     break;
                 }
@@ -99,33 +118,29 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
         }
     }
 
-    /**
-     * 写响应（线程安全）
-     */
+    /** 写响应，线程安全 + TPS 统计 */
     private void write(ChannelHandlerContext ctx, byte[] data) {
         if (!ctx.channel().isActive()) {
             return;
         }
+
         ctx.writeAndFlush(Unpooled.wrappedBuffer(data))
                 .addListener(f -> {
                     if (f.isSuccess()) {
-                        TpsCounter.mark();   // ⭐ 真正的 TPS
+                        TpsCounter.mark(); // ⭐ 无锁计数 TPS
                     } else {
                         log.error("发送失败", f.cause());
                     }
                 });
     }
 
-
-    /**
-     * 延迟状态报告（一定走 EventLoop）
-     */
+    /** 延迟状态报告（独立线程池，避免 EventLoop 阻塞） */
     private void scheduleReport(ChannelHandlerContext ctx, MsgSubmit submit, long msgId) {
-        String now = LocalDateTime.now().format(TS_FMT);
-        ctx.channel().eventLoop().schedule(() -> {
-            if (!ctx.channel().isActive()) {
-                return;
-            }
+        final String now = LocalDateTime.now().format(TS_FMT);
+
+        REPORT_POOL.schedule(() -> {
+            if (!ctx.channel().isActive()) return;
+
             try {
                 MsgDeliver report = MsgDeliver.createReport(
                         (String) submit.getDestTerminalId().get(0),
@@ -137,9 +152,14 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
                 );
                 report.setLinkId("GW");
 
-                ctx.writeAndFlush(Unpooled.wrappedBuffer(report.generateBytes()));
+                ctx.writeAndFlush(Unpooled.wrappedBuffer(report.generateBytes()))
+                        .addListener(f -> {
+                            if (!f.isSuccess()) {
+                                log.error("发送状态报告失败", f.cause());
+                            }
+                        });
             } catch (Exception e) {
-                log.error("发送状态报告失败", e);
+                log.error("生成状态报告失败", e);
             }
         }, 2, TimeUnit.SECONDS);
     }
@@ -150,4 +170,3 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
         ctx.close();
     }
 }
-
