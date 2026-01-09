@@ -81,46 +81,6 @@ public class PutMsgService {
         return submitResp.toByteArry();
     }
 
-
-
-    /**
-     * 编码MsgReport为60字节
-     */
-    private static byte[] encodeMsgReport(MsgReport report) {
-        ByteBuffer buffer = ByteBuffer.allocate(60);
-        buffer.order(ByteOrder.BIG_ENDIAN);
-
-        // 1. Msg_Id (8字节)
-        buffer.putLong(report.getMsgId());
-
-        // 2. Stat (7字节，右补空格)
-        byte[] statBytes = report.getStat().getBytes(StandardCharsets.US_ASCII);
-        int statLen = Math.min(statBytes.length, 7);
-        buffer.put(statBytes, 0, statLen);
-        for (int i = statLen; i < 7; i++) {
-            buffer.put((byte) ' ');  // 右补空格
-        }
-
-        // 3. Submit_time (10字节)
-        buffer.put(fixedLengthBytes(report.getSubmitTime(), 10));
-
-        // 4. Done_time (10字节)
-        buffer.put(fixedLengthBytes(report.getDoneTime(), 10));
-
-        // 5. Dest_terminal_Id (21字节，左对齐右补0)
-        buffer.put(fixedLengthBytes(report.getDestTerminalId(), 21));
-
-        // 6. SMSC_sequence (4字节)
-        buffer.putInt(report.getSmscSequence());
-
-        // 填充剩余字节为0（总60字节）
-        while (buffer.position() < 60) {
-            buffer.put((byte) 0);
-        }
-
-        return buffer.array();
-    }
-
     /**
      * 固定长度字节数组，不足右补0
      */
@@ -134,37 +94,5 @@ public class PutMsgService {
         }
         return bytes;
     }
-
-
-
-    /**
-     * 截断或填充字符串
-     */
-    private static String truncateOrPad(String str, int length, char padChar) {
-        if (str == null) {
-            str = "";
-        }
-
-        if (str.length() > length) {
-            return str.substring(0, length);
-        } else if (str.length() < length) {
-            StringBuilder sb = new StringBuilder(str);
-            while (sb.length() < length) {
-                sb.append(padChar);
-            }
-            return sb.toString();
-        }
-        return str;
-    }
-
-
-
-    private static String now() {
-        // CMPP 要求：YYMMDDHHMM
-        DateTimeFormatter formatter =
-                DateTimeFormatter.ofPattern("yyMMddHHmm");
-        return LocalDateTime.now().format(formatter);
-    }
-
 
 }
