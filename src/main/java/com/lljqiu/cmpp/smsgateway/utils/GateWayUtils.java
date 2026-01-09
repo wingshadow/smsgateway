@@ -231,6 +231,33 @@ public class GateWayUtils {
 
         return ret;
     }
+
+    public static int bytes4ToInt(byte[] bytes) {
+        return ((bytes[0] & 0xFF) << 24)
+                | ((bytes[1] & 0xFF) << 16)
+                | ((bytes[2] & 0xFF) << 8)
+                |  (bytes[3] & 0xFF);
+    }
+
+    public static int bytes4ToInt(byte[] b, int offset) {
+        return ((b[offset] & 0xFF) << 24)
+                | ((b[offset + 1] & 0xFF) << 16)
+                | ((b[offset + 2] & 0xFF) << 8)
+                |  (b[offset + 3] & 0xFF);
+    }
+
+    public static long bytes8ToLong(byte[] b, int offset) {
+        return ((b[offset] & 0xFFL) << 56)
+                | ((b[offset + 1] & 0xFFL) << 48)
+                | ((b[offset + 2] & 0xFFL) << 40)
+                | ((b[offset + 3] & 0xFFL) << 32)
+                | ((b[offset + 4] & 0xFFL) << 24)
+                | ((b[offset + 5] & 0xFFL) << 16)
+                | ((b[offset + 6] & 0xFFL) << 8)
+                |  (b[offset + 7] & 0xFFL);
+    }
+
+
     public static int byteToInt(byte byte0) {
         return byte0;
     }

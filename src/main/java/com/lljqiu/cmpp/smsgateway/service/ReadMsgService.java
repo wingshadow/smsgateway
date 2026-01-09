@@ -3,15 +3,12 @@ package com.lljqiu.cmpp.smsgateway.service;
 import java.io.*;
 import java.net.Socket;
 
+import com.lljqiu.cmpp.smsgateway.stack.*;
 import com.lljqiu.cmpp.smsgateway.utils.MsgIdGenerator;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.lljqiu.cmpp.smsgateway.stack.MsgCommand;
-import com.lljqiu.cmpp.smsgateway.stack.MsgConnect;
-import com.lljqiu.cmpp.smsgateway.stack.MsgHead;
-import com.lljqiu.cmpp.smsgateway.stack.MsgSubmit;
 import com.lljqiu.cmpp.smsgateway.utils.GateWayUtils;
 
 public class ReadMsgService {
@@ -249,4 +246,39 @@ public class ReadMsgService {
 
         return msgConnect;
     }
+
+    public static MsgDeliverResp readDeliverResp(byte[] data) {
+        MsgDeliverResp resp = new MsgDeliverResp();
+
+        int offset = 0;
+
+        // 1. Command_Id
+        resp.setCommandId(GateWayUtils.bytes4ToInt(data, offset));
+        offset += 4;
+
+        // 2. Sequence_Id
+        resp.setSequenceId(GateWayUtils.bytes4ToInt(data, offset));
+        offset += 4;
+
+        // 3. Msg_Id
+        resp.setMsgId(GateWayUtils.bytes8ToLong(data, offset));
+        offset += 8;
+
+        // 4. Result（标准 4 字节 / 非标 1 字节 兼容）
+        int remain = data.length - offset;
+        if (remain >= 4) {
+            resp.setResult(GateWayUtils.bytes4ToInt(data, offset));
+            offset += 4;
+        } else if (remain == 1) {
+            resp.setResult(data[offset] & 0xFF);
+            offset += 1;
+        } else {
+            throw new IllegalArgumentException(
+                    "非法 CMPP_DELIVER_RESP, remain=" + remain);
+        }
+
+        resp.setTotalLength(data.length);
+        return resp;
+    }
+
 }

@@ -1,5 +1,6 @@
 package com.lljqiu.cmpp.smsgateway.handler;
 
+import com.alibaba.fastjson.JSON;
 import com.lljqiu.cmpp.smsgateway.service.PutMsgService;
 import com.lljqiu.cmpp.smsgateway.service.ReadMsgService;
 import com.lljqiu.cmpp.smsgateway.stack.*;
@@ -27,7 +28,9 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
     private static final DateTimeFormatter TS_FMT =
             DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-    /** 业务线程池（处理 submit/connect） */
+    /**
+     * 业务线程池（处理 submit/connect）
+     */
     private static final ExecutorService BUSINESS_POOL =
             new ThreadPoolExecutor(
                     8,
@@ -44,7 +47,9 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
                     new ThreadPoolExecutor.CallerRunsPolicy()
             );
 
-    /** 状态报告线程池 */
+    /**
+     * 状态报告线程池
+     */
     private static final ScheduledExecutorService REPORT_POOL =
             Executors.newScheduledThreadPool(
                     4,
@@ -77,7 +82,9 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
         }
     }
 
-    /** 业务处理 */
+    /**
+     * 业务处理
+     */
     private void process(ChannelHandlerContext ctx, ByteBuf buf) {
         try {
             byte[] data = new byte[buf.readableBytes()];
@@ -105,10 +112,14 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
                     byte[] resp = PutMsgService.setSubmitResp(submit, msgId);
                     write(ctx, resp);
 
-//                    scheduleReport(ctx, submit, msgId);
+                    scheduleReport(ctx, submit, msgId);
                     break;
                 }
-
+                case MsgCommand.CMPP_DELIVER_RESP: {
+                    MsgDeliverResp deliverResp = ReadMsgService.readDeliverResp(data);
+                    log.info("deliver resp {}", JSON.toJSONString(deliverResp));
+                    break;
+                }
                 default:
                     log.warn("未知命令: 0x{}", Integer.toHexString(head.getCommandId()));
             }
@@ -118,7 +129,9 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
         }
     }
 
-    /** 写响应，线程安全 + TPS 统计 */
+    /**
+     * 写响应，线程安全 + TPS 统计
+     */
     private void write(ChannelHandlerContext ctx, byte[] data) {
         if (!ctx.channel().isActive()) {
             return;
@@ -134,12 +147,16 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
                 });
     }
 
-    /** 延迟状态报告（独立线程池，避免 EventLoop 阻塞） */
+    /**
+     * 延迟状态报告（独立线程池，避免 EventLoop 阻塞）
+     */
     private void scheduleReport(ChannelHandlerContext ctx, MsgSubmit submit, long msgId) {
         final String now = LocalDateTime.now().format(TS_FMT);
 
         REPORT_POOL.schedule(() -> {
-            if (!ctx.channel().isActive()) return;
+            if (!ctx.channel().isActive()) {
+                return;
+            }
 
             try {
                 MsgDeliver report = MsgDeliver.createReport(
