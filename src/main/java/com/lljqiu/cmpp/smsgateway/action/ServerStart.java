@@ -14,6 +14,7 @@ import com.lljqiu.cmpp.smsgateway.server.NettyCmppServer;
 import com.lljqiu.cmpp.smsgateway.server.SMSServer;
 import com.lljqiu.cmpp.smsgateway.utils.Constants;
 import com.lljqiu.cmpp.smsgateway.utils.GatewayConfig;
+import com.lljqiu.cmpp.smsgateway.utils.SpConfigHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,13 +30,7 @@ public class ServerStart {
     public static void main(String[] args) {
 //        SMSServer server = new SMSServer();
 //        server.start();
-        JSONArray jsonArray = GatewayConfig.getClientConfig();
-        for (int i = 0; i < jsonArray.size(); i++) {
-            JSONObject json = (JSONObject) jsonArray.get(i);
-            EhCache.put(EhCache.CACHE_NAME, json.get(Constants.SPID), json);
-        }
-
-
+        SpConfigHolder.init();
         int port = GatewayConfig.getGatewayPort();
         NettyCmppServer server = new NettyCmppServer(port);
         server.startAsync();

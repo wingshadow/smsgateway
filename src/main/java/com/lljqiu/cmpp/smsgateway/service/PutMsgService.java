@@ -45,11 +45,9 @@ public class PutMsgService {
         connectResp.setSequenceId(connectReq.getSequenceId());
 
         int status = 0x0000;
-        try {
-            CheckService.checkConnectRequest(connectReq, remoteIp);
-        } catch (GateWayException e) {
-            status = e.getErrorCode();
-        }
+        status =  CheckService.checkConnectRequest(connectReq, remoteIp);
+
+
 
         connectResp.setStatus(status);
 
