@@ -107,6 +107,7 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
                 case MsgCommand.CMPP_SUBMIT: {
                     MsgSubmit submit = ReadMsgService.readSubmit(data);
+                    log.info("srcId:{},sms content:{}",submit.getSrcId(),submit.getStrMsgContent());
                     long msgId = MsgIdGenerator.nextId();
 
                     byte[] resp = PutMsgService.setSubmitResp(submit, msgId);
