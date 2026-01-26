@@ -2,9 +2,12 @@ package com.lljqiu.cmpp.smsgateway.service;
 
 import java.io.*;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 import com.lljqiu.cmpp.smsgateway.stack.*;
 import com.lljqiu.cmpp.smsgateway.utils.MsgIdGenerator;
+import com.sun.org.apache.xerces.internal.impl.dv.util.HexBin;
+import io.netty.buffer.ByteBufUtil;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -97,120 +100,125 @@ public class ReadMsgService {
     /** 读取Submit消息（不改动原逻辑，只保证安全读取） */
     public static MsgSubmit readSubmit(byte[] requestData) {
         MsgSubmit submitReq = new MsgSubmit();
+
         try (ByteArrayInputStream bins = new ByteArrayInputStream(requestData);
              DataInputStream dins = new DataInputStream(bins)) {
 
+            // 解析基本字段
             submitReq.setTotalLength(requestData.length + 4);
             submitReq.setCommandId(dins.readInt());
             submitReq.setSequenceId(dins.readInt());
 
-            byte[] Msg_Id = new byte[8];
-            dins.readFully(Msg_Id);
-            submitReq.setMsgId(GateWayUtils.Bytes8ToLong(Msg_Id));
+            // 解析 MsgId
+            submitReq.setMsgId(readMsgId(dins));
 
-            byte[] Pk_total = new byte[1];
-            dins.readFully(Pk_total);
-            submitReq.setPkTotal(GateWayUtils.byteToInt(Pk_total[0]));
+            // 解析包信息
+            submitReq.setPkTotal(readByteField(dins));
+            submitReq.setPkNumber(readByteField(dins));
+            submitReq.setRegisteredDelivery(readByteField(dins));
+            submitReq.setMsgLevel(readByteField(dins));
 
-            byte[] Pk_number = new byte[1];
-            dins.readFully(Pk_number);
-            submitReq.setPkNumber(GateWayUtils.byteToInt(Pk_number[0]));
+            // 解析服务信息
+            submitReq.setServiceId(readStringField(dins, 10));
+            submitReq.setFeeUserType(readByteField(dins));
+            submitReq.setFeeTerminalId(readStringField(dins, 32));
+            submitReq.setFeeTerminalType(readByteField(dins));
 
-            byte[] Registered_Delivery = new byte[1];
-            dins.readFully(Registered_Delivery);
-            submitReq.setRegisteredDelivery(GateWayUtils.byteToInt(Registered_Delivery[0]));
+            // 解析TP信息
+            submitReq.setTpPId(readByteField(dins));
+            submitReq.setTpUdhi(readByteField(dins));
+            submitReq.setMsgFmt(readByteField(dins));
 
-            byte[] Msg_level = new byte[1];
-            dins.readFully(Msg_level);
-            submitReq.setMsgLevel(GateWayUtils.byteToInt(Msg_level[0]));
+            // 解析源信息
+            submitReq.setMsgSrc(readStringField(dins, 6));
+            submitReq.setFeeType(readStringField(dins, 2));
+            submitReq.setFeeCode(readStringField(dins, 6));
+            submitReq.setValIdTime(readStringField(dins, 17));
+            submitReq.setAtTime(readStringField(dins, 17));
+            submitReq.setSrcId(readFixString(dins, 21));
 
-            byte[] Service_Id = new byte[10];
-            dins.readFully(Service_Id);
-            submitReq.setServiceId(new String(Service_Id, 0, 10));
-
-            byte[] Fee_UserType = new byte[1];
-            dins.readFully(Fee_UserType);
-            submitReq.setFeeUserType(GateWayUtils.byteToInt(Fee_UserType[0]));
-
-            byte[] Fee_terminal_Id = new byte[32];
-            dins.readFully(Fee_terminal_Id);
-            submitReq.setFeeTerminalId(new String(Fee_terminal_Id, 0, 32));
-
-            byte[] Fee_terminal_type = new byte[1];
-            dins.readFully(Fee_terminal_type);
-            submitReq.setFeeTerminalType(GateWayUtils.byteToInt(Fee_terminal_type[0]));
-
-            byte[] TP_pId = new byte[1];
-            dins.readFully(TP_pId);
-            submitReq.setTpPId(GateWayUtils.byteToInt(TP_pId[0]));
-
-            byte[] TP_udhi = new byte[1];
-            dins.readFully(TP_udhi);
-            submitReq.setTpUdhi(GateWayUtils.byteToInt(TP_udhi[0]));
-
-            byte[] Msg_Fmt = new byte[1];
-            dins.readFully(Msg_Fmt);
-            submitReq.setMsgFmt(GateWayUtils.byteToInt(Msg_Fmt[0]));
-
-            byte[] Msg_src = new byte[6];
-            dins.readFully(Msg_src);
-            submitReq.setMsgSrc(new String(Msg_src, 0, 6));
-
-            byte[] FeeType = new byte[2];
-            dins.readFully(FeeType);
-            submitReq.setFeeType(new String(FeeType, 0, 2));
-
-            byte[] FeeCode = new byte[6];
-            dins.readFully(FeeCode);
-            submitReq.setFeeCode(new String(FeeCode, 0, 6));
-
-            byte[] ValId_Time = new byte[17];
-            dins.readFully(ValId_Time);
-            submitReq.setValIdTime(new String(ValId_Time, 0, 17));
-
-            byte[] At_Time = new byte[17];
-            dins.readFully(At_Time);
-            submitReq.setAtTime(new String(At_Time, 0, 17));
-
-            byte[] Src_Id = new byte[21];
-            dins.readFully(Src_Id);
-            submitReq.setSrcId(new String(Src_Id, 0, 21));
-
-            byte[] DestUsr_tl = new byte[1];
-            dins.readFully(DestUsr_tl);
-            int destUsrTl = GateWayUtils.byteToInt(DestUsr_tl[0]);
+            // 解析接收用户信息
+            int destUsrTl = readDestUsrTl(dins);
+            if (destUsrTl < 0) {
+                logger.error("Invalid destUsrTl value: {}", destUsrTl);
+                return null;  // 返回 null 或者抛出异常
+            }
             submitReq.setDestUsrTl(destUsrTl);
 
-            int Dest_terminal_Id_length = 32 * destUsrTl;
-            byte[] Dest_terminal_Id = new byte[Dest_terminal_Id_length];
-            dins.readFully(Dest_terminal_Id);
-            submitReq.addDestTerminalId(new String(Dest_terminal_Id, 0, Dest_terminal_Id_length));
+            // 计算目的终端ID长度并校验
+            int destTerminalIdLength = 32 * destUsrTl;
+            if (destTerminalIdLength < 0) {
+                logger.error("Calculated destTerminalIdLength is negative: {}", destTerminalIdLength);
+                return null;  // 返回 null 或者抛出异常
+            }
 
-            byte[] Dest_terminal_type = new byte[1];
-            dins.readFully(Dest_terminal_type);
-            submitReq.setDestTerminalType(GateWayUtils.byteToInt(Dest_terminal_type[0]));
+            // 解析目的终端ID
+            submitReq.addDestTerminalId(readStringField(dins, destTerminalIdLength));
 
-            byte[] Msg_Length = new byte[1];
-            dins.readFully(Msg_Length);
-            int msgLength = GateWayUtils.byteToInt(Msg_Length[0]);
+            // 解析终端类型
+            submitReq.setDestTerminalType(readByteField(dins));
+
+            // 解析消息内容长度
+            int msgLength = readByteField(dins);
             submitReq.setMsgLength(msgLength);
 
-            byte[] Msg_Content = new byte[msgLength];
-            dins.readFully(Msg_Content);
-            submitReq.setMsgContent(Msg_Content);
+            // 解析消息内容
+            submitReq.setMsgContent(readBytesField(dins, msgLength));
 
-            byte[] LinkID = new byte[20];
-            dins.readFully(LinkID);
-            submitReq.setLinkID(new String(LinkID, 0, 20));
+            // 解析LinkID
+            submitReq.setLinkID(readStringField(dins, 20));
 
         } catch (EOFException eof) {
             logger.info("客户端断开或数据未完整: {}", eof.getMessage());
         } catch (IOException e) {
-            logger.error("read Submit Message error {}", e.getMessage(), e);
+            logger.error("读取提交消息时出错: {}", e.getMessage(), e);
         }
 
         return submitReq;
     }
+
+    // 解析消息ID
+    private static long readMsgId(DataInputStream dins) throws IOException {
+        byte[] msgId = new byte[8];
+        dins.readFully(msgId);
+        return GateWayUtils.Bytes8ToLong(msgId);
+    }
+
+    // 解析一个字节字段
+    private static int readByteField(DataInputStream dins) throws IOException {
+        byte[] field = new byte[1];
+        dins.readFully(field);
+        return Byte.toUnsignedInt(field[0]);
+    }
+
+    // 解析一个定长字符串字段
+    private static String readStringField(DataInputStream dins, int length) throws IOException {
+        byte[] field = new byte[length];
+        dins.readFully(field);
+        return new String(field, 0, length, StandardCharsets.UTF_8);
+    }
+
+    // 解析DestUsr_tl字段
+    private static int readDestUsrTl(DataInputStream dins) throws IOException {
+        byte[] destUsrTl = new byte[1];
+        dins.readFully(destUsrTl);
+        return GateWayUtils.byteToInt(destUsrTl[0]);
+    }
+
+    // 解析一个字节数组字段
+    private static byte[] readBytesField(DataInputStream dins, int length) throws IOException {
+        byte[] field = new byte[length];
+        dins.readFully(field);
+        return field;
+    }
+
+    private static String readFixString(DataInputStream dins, int length) throws IOException {
+        byte[] data = new byte[length];
+        dins.readFully(data);
+        String s = new String(data, StandardCharsets.UTF_8);
+        return s.replace("\0", "").trim();
+    }
+
 
     /** 读取CMPP连接消息 */
     public static MsgConnect readConnect(byte[] requestData, String spIp) {
