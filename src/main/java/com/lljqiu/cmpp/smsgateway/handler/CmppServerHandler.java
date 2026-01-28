@@ -164,17 +164,15 @@ public class CmppServerHandler extends SimpleChannelInboundHandler<ByteBuf> {
                         (String) submit.getDestTerminalId().get(0),
                         submit.getSrcId(),
                         msgId,
-                        "DELIVRD",
-                        now,
-                        now
+                        "DELIVRD"
                 );
-                report.setLinkId("GW");
 
-                ctx.writeAndFlush(Unpooled.wrappedBuffer(report.generateBytes()))
+                ctx.writeAndFlush(Unpooled.wrappedBuffer(report.toBytes()))
                         .addListener(f -> {
                             if (!f.isSuccess()) {
                                 log.error("发送状态报告失败", f.cause());
                             }
+                            log.info("发送成功");
                         });
             } catch (Exception e) {
                 log.error("生成状态报告失败", e);
